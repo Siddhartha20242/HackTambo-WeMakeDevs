@@ -19,9 +19,9 @@ export default function ResearchPage() {
         </h1>
         <div className="flex flex-col items-center gap-2">
           <p className="text-slate-300 text-sm md:text-base">
-            By Siddhartha Bhattarai, Sachin Poudel<sup>*</sup>, Anmol Pantha<sup>*</sup>, Shubharamba Pandey<sup>*</sup>
+            By Siddhartha Bhattarai
           </p>
-          <p className="text-slate-500 text-[10px] italic"><sup>*</sup>Equal Contribution</p>
+          
         </div>
       </div>
 
