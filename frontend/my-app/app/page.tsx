@@ -1,30 +1,21 @@
+// src/app/page.tsx
 "use client";
 import { useUser } from "./components/UserContext";
-import { useState } from "react";
+import WelcomeScreen from "./components/welcome/welcome";
+import NexusDashboard from "./dashboard/page"; 
 
-export default function WelcomeScreen() {
-  const { user, setName } = useUser();
-  const [inputValue, setInputValue] = useState("");
-
-  // If the context has a name, this screen disappears
-  if (user.name) return null;
+export default function Home() {
+  const { user } = useUser();
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
-      <div className="p-8 border border-blue-500/50 bg-slate-900 rounded-xl">
-        <h2 className="text-xl font-mono text-blue-400 mb-4">IDENTIFICATION REQUIRED</h2>
-        <input 
-          className="bg-black border border-white/20 p-2 text-white w-full mb-4"
-          placeholder="Enter your name..."
-          onChange={(e) => setInputValue(e.target.value)}
-        />
-        <button 
-          onClick={() => setName(inputValue)}
-          className="w-full bg-blue-600 p-2 font-bold"
-        >
-          INITIALIZE
-        </button>
-      </div>
-    </div>
+    <main className="min-h-screen bg-black">
+      {!user.name ? (
+        <WelcomeScreen />
+      ) : (
+        <div className="animate-in fade-in duration-1000">
+          <NexusDashboard />
+        </div>
+      )}
+    </main>
   );
 }
