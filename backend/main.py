@@ -112,7 +112,32 @@ class FeedbackRequest(BaseModel):
 
 @app.post('/record-feedback')
 def record_feedback(req: FeedbackRequest, db:Session = Depends(get_session)):
+    reward = 1.0 if req.approved else -1.0
+    new_q_value = agent.update(
+        state_hash = req.state_hash,
+        action = req.action,
+        reward = reward,
+        db = db
+    )
+
+    log = Interaction(
+        user_name = req.user_name,
+        action = req.action,
+        reward = reward,
+        approved = req.approved,
+        confidence = req.confidence,
+        was_exploration = req.was_exploration
+    )
+    db.add(log)
+    db.commit()
+
+    print(f" TRAINING: {req.action} in state {req.state_hash} -> New Q: {new_q_value}")
     
+    return {
+        "status": "learned", 
+        "new_q_value": new_q_value,
+        "reward_applied": reward
+    }
 
 
 
