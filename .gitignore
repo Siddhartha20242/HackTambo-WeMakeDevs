@@ -1,14 +1,15 @@
+# --- Python (Backend) ---
+backend/venv/
+backend/__pycache__/
+*.pyc
 .env
-.next
-node_modules
-.public
 
-
-
-
-
-
-
-
-
-
+# --- Node/Next.js (Frontend) ---
+node_modules/
+.next/
+out/
+build/
+.DS_Store
+*.log
+frontend/my-app/node_modules/
+frontend/my-app/.next/
