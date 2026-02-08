@@ -1,27 +1,34 @@
 from sqlmodel import SQLModel, Field
 from typing import Optional
-from datetime import datetime
+import datetime
+
 
 class QTable(SQLModel, table=True):
-    """
-    KNOWLEDGE BASE: Stores the Q-values.
-    Primary Key is a composite of 'State' and 'Action'.
-    """
-    state_hash: str = Field(primary_key=True, index=True) 
-    action: str = Field(primary_key=True)                 
-    q_value: float = Field(default=0.0)
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    state_hash: str = Field(primary_key=True)
+    action: str = Field(primary_key=True)
+    q_value: float = 0.0
+    last_updated: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
 class Interaction(SQLModel, table=True):
-    """
-    HISTORY LOG: Records every 'Approve' or 'Reject' click.
-    Used for Session Detection and Analytics.
-    """
     id: Optional[int] = Field(default=None, primary_key=True)
     user_name: str
     action: str
-    reward: float  # +1.0 for Approve, -1.0 for Reject
+    reward: float
     approved: bool
     confidence: float
     was_exploration: bool
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+
+
+class Grade(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    subject: str
+    credit_hours: int
+    grade_point: float 
+
+class Resource(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    type: str  
+    url: str
+    tags: str 

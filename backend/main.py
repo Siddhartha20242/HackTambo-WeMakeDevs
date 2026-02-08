@@ -1,180 +1,185 @@
 import os
+import subprocess
+import asyncio
+import json
+import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, create_engine, SQLModel
+from typing import Optional
+
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from groq import Groq
 
-from models import QTable, Interaction
 from agent import NexusAgent
 
 load_dotenv()
 
-# Database Setup
-DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL, echo=True)
+groq_client = None
+try:
+    api_key = os.getenv("GROQ_API_KEY")
+    if api_key:
+        groq_client = Groq(api_key=api_key)
+        print(" NEXUS AI: GROQ ONLINE")
+    else:
+        print("Missing GROQ_API_KEY")
+except Exception as e:
+    print(" Groq init error:", e)
+
+
+agent = NexusAgent()
+leetcode_active = True 
+last_ai_call_time = 0
+AI_COOLDOWN_SECONDS = 0 
+latest_suggestion = None
+last_ai_message = None
+last_broadcast_tool = None
+
+
+def check_browser_activity() -> tuple[Optional[str], Optional[str]]:
+    script = 'tell application "System Events" to get name of first window of (processes whose frontmost is true)'
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True
+        )
+        title = result.stdout.strip().lower()
+        if "leetcode" in title:
+            return "leetcode", title
+        return None, None
+    except:
+        return None, None
+
+async def browser_watcher():
+    global leetcode_active, last_broadcast_tool
+    print(" Watcher started...")
+    while True:
+        try:
+            activity, _ = check_browser_activity()
+
+            if activity == "leetcode":
+                leetcode_active = True
+                if last_broadcast_tool != "leetcode":
+                    print(" NEXUS AI: Watching LeetCode session")
+                    last_broadcast_tool = "leetcode"
+            else:
+                leetcode_active = False
+                if last_broadcast_tool:
+                    print(" LeetCode closed")
+                    last_broadcast_tool = None
+
+        except Exception as e:
+            print("Watcher error:", e)
+
+        await asyncio.sleep(2)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    SQLModel.metadata.create_all(engine)
+    agent.load_brain()
+    asyncio.create_task(browser_watcher())
+    print("🧠 Nexus Brain ONLINE")
     yield
+    print("🧠 Nexus Brain OFFLINE")
 
 app = FastAPI(title="Nexus Brain", lifespan=lifespan)
-agent = NexusAgent()
 
-# CORS: Allow Frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-def get_session():
-    with Session(engine) as session:
-        yield session
+@app.middleware("http")
+async def cors(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*"
+            },
+        )
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+class CodeSnippet(BaseModel):
+    code: str
+    problem: str
+    timestamp: str
 
-# --- SCHEMAS ---
-class PredictRequest(BaseModel):
-    user_name: str
-    context: str = "dashboard"
-    force_explore: bool = False
+@app.post("/analyze-code")
+def analyze_code(snippet: CodeSnippet):
+    global last_ai_call_time, latest_suggestion
+    print(f"📝 Analyzing: {snippet.problem}")
+    
 
-class FeedbackRequest(BaseModel):
-    user_name: str
-    action: str
-    state_hash: str
-    approved: bool
-    confidence: float
-    was_exploration: bool
+    if not snippet.code or len(snippet.code) < 15:
+        return {"trigger": None}
 
-# --- ENDPOINTS ---
+    current_time = time.time()
+    if current_time - last_ai_call_time < 15:
+        return {"trigger": None}
+
+    if groq_client and len(snippet.code) > 50:
+        try:
+            print("   ✨ Asking Groq AI...")
+            last_ai_call_time = current_time
+            
+            prompt = f"""Analyze this code for "{snippet.problem}". Only report REAL bugs or errors.
+
+Code:
+{snippet.code[:400]}
+
+Return ONLY raw JSON (no markdown, no backticks):
+{{"status": "error", "message": "Brief 1-sentence bug explanation"}}
+OR {{"status": "ok"}} if code looks reasonable.
+"""
+            
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a code analyzer. Return only JSON responses."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model="llama-3.3-70b-versatile",
+                temperature=0.3,
+            )
+            
+            response_text = chat_completion.choices[0].message.content.strip()
+            clean_text = response_text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean_text)
+            
+            if data.get("status") == "error":
+                print(f"   🤖 BUG FOUND: {data['message']}")
+                latest_suggestion = {
+                    "trigger": "warning",
+                    "message": data['message']
+                }
+                return latest_suggestion
+                
+        except Exception as e:
+            print(f"    AI Error: {str(e)[:80]}")
+    
+    return {"trigger": None}
+# =========================
+@app.get("/notifications")
+def notifications():
+    global latest_suggestion
+    if latest_suggestion:
+        msg = latest_suggestion
+        latest_suggestion = None
+        return msg
+    return {}
+
 
 @app.get("/")
 def health():
-    return {"status": "online", "brain": "active"}
-
-@app.get("/stats")
-def stats(db: Session = Depends(get_session)):
-    return agent.get_stats(db)
-
-
-
-
-
-
-class PredictRequest(BaseModel):
-    user_name: str
-    context: str = "dashboard"
-    force_explore: bool = False
-
-@app.post('/predict')
-def predict_tool(req:PredictRequest, db: Session = Depends(get_session)):
-    import datetime
-    now = datetime.datetime.now()
-
-    duration_mins = agent.get_session_duration(req.user_name, db)
-
-    state_hash = agent.encode_state(
-        hour = now.hour,
-        day = now.weekday(),
-        context = req.context,
-        session_mins = duration_mins
-    )
-
-    tools_name, confidence, is_exploration = agent.predict(
-        state_hash = state_hash,
-        db = db,
-        force_explore = req.force_explore
-    )
-
-    return{
-        "tool": tools_name,
-        "confidence": confidence,
-        "state_hash": state_hash,
-        "is_exploration": is_exploration,
-        "session_minutes": round(duration_mins, 1)
-    }
-
-class FeedbackRequest(BaseModel):
-    user_name: str 
-    action: str 
-    state_hash = str
-    approved: bool
-    confidence: float
-    was_exploration: bool
-
-
-@app.post('/record-feedback')
-def record_feedback(req: FeedbackRequest, db:Session = Depends(get_session)):
-    reward = 1.0 if req.approved else -1.0
-    new_q_value = agent.update(
-        state_hash = req.state_hash,
-        action = req.action,
-        reward = reward,
-        db = db
-    )
-
-    log = Interaction(
-        user_name = req.user_name,
-        action = req.action,
-        reward = reward,
-        approved = req.approved,
-        confidence = req.confidence,
-        was_exploration = req.was_exploration
-    )
-    db.add(log)
-    db.commit()
-
-    print(f" TRAINING: {req.action} in state {req.state_hash} -> New Q: {new_q_value}")
-    
-    return {
-        "status": "learned", 
-        "new_q_value": new_q_value,
-        "reward_applied": reward
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-@app.post("/feedback")
-def submit_feedback(req: FeedbackRequest, db: Session = Depends(get_session)):
-    # 1. Calculate Reward
-    reward = 1.0 if req.approved else -1.0
-    
-    # 2. Update Brain
-    new_q = agent.update(req.state_hash, req.action, reward, db)
-    
-    # 3. Log History
-    log = Interaction(
-        user_name=req.user_name,
-        action=req.action,
-        reward=reward,
-        approved=req.approved,
-        confidence=req.confidence,
-        was_exploration=req.was_exploration
-    )
-    db.add(log)
-    db.commit()
-    
-    return {"status": "learned", "new_q": new_q}
+    return {"status": "online"}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
