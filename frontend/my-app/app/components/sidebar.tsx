@@ -4,11 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation"; // Hook to see which page we are on
 
 const navItems = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "LeetCode", href: "/leetcode", icon: Code2 },
-  { name: "Grade Calc", href: "/grades", icon: Calculator },
   { name: "Research", href: "/research", icon: Timer }, // Changed icon to Timer
-  { name: "Resources", href: "/resources", icon: BookOpen }
 ];
 
 export function Sidebar() {

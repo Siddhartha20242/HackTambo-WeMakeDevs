@@ -1,8 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@keyframes shrink-6s {
+    from { width: 100%; }
+    to { width: 0%; }
+}
 
-@custom-variant dark (&:is(.dark *));
-
+.animate-shrink-6s {
+    animation: shrink-6s 6s linear forwards;
+}
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
