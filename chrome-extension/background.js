@@ -5,7 +5,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         
 
         if (tab.url.includes("leetcode.com/problems/")) {
-            console.log("🚀 Nexus detected a problem! Sending timer signal...");
+            console.log(" Nexus detected a problem! Sending timer signal...");
             
 
             chrome.tabs.sendMessage(tabId, { action: "START_AUTO_TIMER" })
