@@ -43,7 +43,7 @@ def retrain_habits():
                 session.add(entry_new)
 
         session.commit()
-        print("✅ Retraining Complete! LeetCode will now trigger Pomodoro.")
+        print(" Retraining Complete! LeetCode will now trigger Pomodoro.")
 
 if __name__ == "__main__":
     retrain_habits()
